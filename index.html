@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WC 2026 Pool Tracker — My Entry</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header>
+  <div class="titleblock">
+    <h1>⚽ World Cup 2026 — Dan's Pool Tracker</h1>
+    <div class="sub">My 12 teams · live from FotMob · <span id="fetchedAt"></span></div>
+  </div>
+  <div class="headerstats">
+    <div class="stat big">
+      <div class="statval"><span id="totalPts">0</span><span id="totalLiveBadge" class="pulse" style="display:none">LIVE</span></div>
+      <div class="statlabel">my points</div>
+    </div>
+    <div class="stat accent">
+      <div class="statval" id="pWin">–</div>
+      <div class="statlabel">chance to win pool</div>
+    </div>
+    <div class="stat">
+      <div class="statval" id="pTop3">–</div>
+      <div class="statlabel">top 3 (cash)</div>
+    </div>
+    <div class="stat">
+      <div class="statval" id="projPts">–</div>
+      <div class="statlabel">projected final <span id="projRange" class="range"></span></div>
+    </div>
+    <div class="stat">
+      <div class="statval" id="winningMedian">–</div>
+      <div class="statlabel">typical winning score</div>
+    </div>
+  </div>
+  <div class="headerbtns">
+    <button id="refreshBtn">↻ Refresh</button>
+    <button id="settingsBtn">⚙ Settings</button>
+  </div>
+  <div class="fieldnote"><span id="fieldNote"></span> <span id="simStatus"></span></div>
+</header>
+
+<div id="liveStrip" class="livestrip" style="display:none"></div>
+
+<main>
+  <section>
+    <h2>Pool standings <span class="h2note">real entries only — projected &amp; odds include the simulated rest of the field</span></h2>
+    <div id="leaderboard"></div>
+  </section>
+
+  <section>
+    <h2>My teams</h2>
+    <div id="picksGrid" class="picksgrid"></div>
+  </section>
+
+  <section>
+    <h2>Where I could finish <span class="h2note">Monte Carlo over the rest of the tournament</span></h2>
+    <canvas id="histo"></canvas>
+  </section>
+
+  <section>
+    <h2>Groups</h2>
+    <div id="groupsGrid" class="groupsgrid"></div>
+    <div id="thirdTable" class="thirdtable"></div>
+  </section>
+
+  <section>
+    <h2>My teams' schedule &amp; results</h2>
+    <div id="schedule"></div>
+  </section>
+
+  <footer>
+    <p><strong>Scoring:</strong> 1/goal (no shootout goals) · group W 3, D 1 · finish bonus 8/4/2(3rd+advance)
+      · reach R16 +4, QF +6, SF +8, Final +10, champion +12, 3rd-place-match win +7 · Tiers 9–12 all doubled.</p>
+    <p class="warn">⚠️ The pool sheet was written for a 16-groups-of-3 format, but the real 2026 World Cup has
+      12 groups of 4 plus a <strong>Round of 32</strong>. This tracker scores knockout bonuses literally
+      (Round of 32 = 0 pts, bonuses start at the real Round of 16). If Dan rules that clearing the R32
+      counts as "reaching the Round of 16," bump <code>reachR32</code> in Settings → Scoring.</p>
+  </footer>
+</main>
+
+<dialog id="settingsDlg">
+  <form method="dialog">
+    <h3>Settings</h3>
+    <div class="formgrid">
+      <label>Pool entries (incl. mine) <input type="number" id="setFieldSize" min="2" max="200"></label>
+      <label>Simulations <input type="number" id="setSims" min="200" max="20000" step="100"></label>
+      <label>Host Elo boost <input type="number" id="setHostBoost" min="0" max="200"></label>
+      <label class="check"><input type="checkbox" id="setLiveGoals"> Count live (in-progress) goals</label>
+    </div>
+    <label class="full">Scoring rules (JSON)
+      <textarea id="setScoring" rows="8" spellcheck="false"></textarea>
+    </label>
+    <label class="full">Real rival entries — one per line, e.g. <code>Dan: France, Brazil, Germany, Mexico, Japan, Ecuador, Canada, Sweden, Scotland, Iraq, Jordan, Haiti</code>
+      <textarea id="setRivals" rows="5" spellcheck="false" placeholder="Leave empty to simulate all rivals"></textarea>
+    </label>
+    <div id="settingsErr" class="err"></div>
+    <div class="dlgbtns">
+      <button id="settingsCancel">Cancel</button>
+      <button id="settingsSave" class="primary">Save &amp; re-simulate</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="data/snapshot.js"></script>
+<script src="js/config.js"></script>
+<script src="js/scoring.js"></script>
+<script src="js/dataio.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
