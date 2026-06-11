@@ -35,6 +35,10 @@ WC.TIERS = {
   12: ["Ghana", "Curacao", "Haiti", "New Zealand"],
 };
 WC.DOUBLE_TIERS = new Set([9, 10, 11, 12]);
+WC.TEAM_TIER = {};
+for (const [tier, teams] of Object.entries(WC.TIERS)) {
+  for (const t of teams) WC.TEAM_TIER[t] = +tier;
+}
 
 // ---- Scoring rules (defaults; editable in Settings) ----
 WC.DEFAULT_SCORING = {
@@ -175,7 +179,7 @@ WC.DEFAULT_SETTINGS = {
   scoring: WC.DEFAULT_SCORING,
   // real rival entries, one per line: "Name: France, Brazil, ..."
   rivalsText: [
-    "Brother: France, Portugal, Belgium, Mexico, Switzerland, Ecuador, Egypt, Ivory Coast, Scotland, Uzbekistan, Bosnia and Herzegovina, Ghana",
+    "Evan: France, Portugal, Belgium, Mexico, Switzerland, Ecuador, Egypt, Ivory Coast, Scotland, Uzbekistan, Bosnia and Herzegovina, Ghana",
     "Dad: Argentina, Portugal, Germany, Mexico, Switzerland, Ecuador, Canada, Sweden, DR Congo, Uzbekistan, Bosnia and Herzegovina, Ghana",
   ].join("\n"),
 };

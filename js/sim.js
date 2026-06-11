@@ -267,13 +267,13 @@
     const entrants = [{ label: "Me", picks: WC.MY_PICKS },
       ...realRivals.map(r => ({ label: r.label, picks: r.picks }))];
     const entAgg = entrants.map(() => ({ wins: 0, top3: 0, sum: 0 }));
+    const entSeries = entrants.map(() => []);
     const nRandomRivals = Math.max(0, settings.fieldSize - entrants.length);
 
-    const myTotals = [];
     const winningTotals = [];
     const teamAgg = {};
-    for (const p of WC.MY_PICKS) {
-      teamAgg[p.name] = { advance: 0, winGroup: 0, R16: 0, QF: 0, SF: 0, FINAL: 0, champion: 0, ptsSum: 0 };
+    for (const name of TEAM_NAMES) {
+      teamAgg[name] = { advance: 0, winGroup: 0, R16: 0, QF: 0, SF: 0, FINAL: 0, champion: 0, ptsSum: 0 };
     }
 
     let i = 0;
@@ -281,17 +281,16 @@
       const end = Math.min(i + 200, N);
       for (; i < end; i++) {
         const rec = simulateTournament(data, opts);
-        const mine = scoreSimEntry(WC.MY_PICKS, rec, scoring);
-        myTotals.push(mine);
-        for (const p of WC.MY_PICKS) {
-          const r = rec[p.name], a = teamAgg[p.name];
+        for (const name of TEAM_NAMES) {
+          const r = rec[name], a = teamAgg[name];
           if (r.advanced) a.advance++;
           if (r.rank === 1) a.winGroup++;
           for (const k of ["R16", "QF", "SF", "FINAL"]) if (r.reached[k]) a[k]++;
           if (r.champion) a.champion++;
-          a.ptsSum += scoreSimEntry([p], rec, scoring);
+          a.ptsSum += scoreSimEntry([{ tier: WC.TEAM_TIER[name], name }], rec, scoring);
         }
         const entTotals = entrants.map(e => scoreSimEntry(e.picks, rec, scoring));
+        entTotals.forEach((t, ei) => entSeries[ei].push(t));
         const allTotals = entTotals.slice();
         for (let k = 0; k < nRandomRivals; k++) allTotals.push(scoreSimEntry(randomRival(), rec, scoring));
         entrants.forEach((e, ei) => {
@@ -311,7 +310,6 @@
     }
 
     function finish() {
-      myTotals.sort((a, b) => a - b);
       winningTotals.sort((a, b) => a - b);
       const q = (arr, p) => arr[Math.min(arr.length - 1, Math.floor(p * arr.length))];
       const teams = {};
@@ -324,16 +322,16 @@
       }
       onDone({
         n: N,
-        pWin: entAgg[0].wins / N,
-        pTop3: entAgg[0].top3 / N,
-        entrants: entrants.map((e, i) => ({
-          label: e.label,
-          pWin: entAgg[i].wins / N, pTop3: entAgg[i].top3 / N, mean: entAgg[i].sum / N,
-        })),
-        mean: myTotals.reduce((s, x) => s + x, 0) / N,
-        p10: q(myTotals, 0.10), p50: q(myTotals, 0.50), p90: q(myTotals, 0.90),
+        entrants: entrants.map((e, i) => {
+          const tt = entSeries[i].sort((a, b) => a - b);
+          return {
+            label: e.label,
+            pWin: entAgg[i].wins / N, pTop3: entAgg[i].top3 / N, mean: entAgg[i].sum / N,
+            p10: q(tt, 0.10), p50: q(tt, 0.50), p90: q(tt, 0.90),
+            totals: tt,
+          };
+        }),
         winningMedian: q(winningTotals, 0.50),
-        totals: myTotals,
         teams,
       });
     }

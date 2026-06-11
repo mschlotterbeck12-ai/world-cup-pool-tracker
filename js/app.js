@@ -6,6 +6,7 @@
   let snap = null;
   let settings = loadSettings();
   let simResult = null;
+  let view = "Me";   // which entry the dashboard is showing
 
   function loadSettings() {
     let s = {};
@@ -13,6 +14,7 @@
     const merged = { ...WC.DEFAULT_SETTINGS, ...s };
     merged.scoring = { ...WC.DEFAULT_SCORING, ...(s.scoring || {}) };
     if (!merged.rivalsText) merged.rivalsText = WC.DEFAULT_SETTINGS.rivalsText;
+    merged.rivalsText = merged.rivalsText.replace(/^Brother:/m, "Evan:");
     return merged;
   }
   function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
@@ -49,34 +51,55 @@
   const fmtPct = (p) => p >= 0.995 ? "100%" : p < 0.005 && p > 0 ? "<1%" : Math.round(p * 100) + "%";
   const fmtTime = (utc) => new Date(utc).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
+  // All real entries (mine + parsed rivals), scored against current data.
+  function scoredEntries() {
+    const { rivals } = parseRivals(settings.rivalsText);
+    return [
+      { label: "Me", picks: WC.MY_PICKS },
+      ...rivals.map(r => ({ label: r.label, picks: r.picks })),
+    ].map(e => ({ ...e, entry: WCScoring.scoreEntry(e.picks, snap, settings.scoring, settings) }));
+  }
+  function simEntrant(label) {
+    return simResult && simResult.entrants ? simResult.entrants.find(e => e.label === label) : null;
+  }
+
   function render() {
-    const entry = WCScoring.scoreEntry(WC.MY_PICKS, snap, settings.scoring, settings);
-    renderHeader(entry);
-    renderLive();
-    renderLeaderboard(entry);
-    renderPicks(entry);
-    renderGroups();
-    renderSchedule();
+    const entries = scoredEntries();
+    const cur = entries.find(e => e.label === view) || entries[0];
+    view = cur.label;
+    const possessive = cur.label === "Me" ? "My" : `${cur.label}'s`;
+    $("#teamsTitle").textContent = `${possessive} teams`;
+    $("#histoWho").textContent = cur.label === "Me" ? "I" : cur.label;
+    $("#ptsLabel").textContent = `${possessive.toLowerCase()} points`;
+    renderHeader(cur);
+    renderLive(cur);
+    renderLeaderboard(entries);
+    renderPicks(cur.entry);
+    renderGroups(cur);
+    renderSchedule(cur);
     $("#fetchedAt").textContent = "Data: " + new Date(snap.fetchedAt).toLocaleString();
   }
 
-  function renderHeader(entry) {
-    $("#totalPts").textContent = entry.total;
-    const live = entry.teams.some(t => t.liveGoals > 0);
+  function pickNames(cur) { return new Set(cur.picks.map(p => p.name)); }
+
+  function renderHeader(cur) {
+    $("#totalPts").textContent = cur.entry.total;
+    const live = cur.entry.teams.some(t => t.liveGoals > 0);
     $("#totalLiveBadge").style.display = live ? "" : "none";
-    if (simResult) {
-      $("#pWin").textContent = fmtPct(simResult.pWin);
-      $("#pTop3").textContent = fmtPct(simResult.pTop3);
-      $("#projPts").textContent = Math.round(simResult.p50);
-      $("#projRange").textContent = `${Math.round(simResult.p10)}–${Math.round(simResult.p90)}`;
+    const ent = simEntrant(cur.label);
+    if (ent) {
+      $("#pWin").textContent = fmtPct(ent.pWin);
+      $("#pTop3").textContent = fmtPct(ent.pTop3);
+      $("#projPts").textContent = Math.round(ent.p50);
+      $("#projRange").textContent = `${Math.round(ent.p10)}–${Math.round(ent.p90)}`;
       $("#winningMedian").textContent = Math.round(simResult.winningMedian);
       $("#fieldNote").textContent = `vs ${settings.fieldSize - 1} rivals (${parseRivals(settings.rivalsText).rivals.length} real, rest simulated) · ${simResult.n.toLocaleString()} sims`;
     }
   }
 
-  function renderLive() {
+  function renderLive(cur) {
     const now = Date.now();
-    const myNames = new Set(WC.MY_PICKS.map(p => p.name));
+    const myNames = pickNames(cur);
     const todays = snap.matches.filter(m => {
       if (!m.utc || m.cancelled) return false;
       const t = new Date(m.utc).getTime();
@@ -104,26 +127,22 @@
   function flag(name) { return (WC.TEAMS[name] || {}).flag || ""; }
 
   // ---- pool leaderboard: me + every real rival entry, scored live ----
-  function renderLeaderboard(myEntry) {
+  // Rows are clickable: clicking switches the whole dashboard to that entry.
+  function renderLeaderboard(entries) {
     const el = $("#leaderboard");
-    const { rivals } = parseRivals(settings.rivalsText);
-    if (!rivals.length) { el.parentElement.style.display = "none"; return; }
+    if (entries.length < 2) { el.parentElement.style.display = "none"; return; }
     el.parentElement.style.display = "";
-    const rows = [
-      { label: "Me", entry: myEntry },
-      ...rivals.map(r => ({ label: r.label, entry: WCScoring.scoreEntry(r.picks, snap, settings.scoring, settings) })),
-    ].sort((a, b) => b.entry.total - a.entry.total);
+    const rows = entries.slice().sort((a, b) => b.entry.total - a.entry.total);
     el.innerHTML = `<table class="lbtable"><thead><tr>
         <th>#</th><th>Entry</th><th>Points</th><th>Projected</th><th>Win</th><th>Top 3</th><th>Teams</th>
       </tr></thead><tbody>` +
       rows.map((r, i) => {
-        const sim = simResult && simResult.entrants
-          ? simResult.entrants.find(e => e.label === r.label) : null;
+        const sim = simEntrant(r.label);
         const flags = r.entry.teams.map(t =>
           `<span class="lbflag ${t.eliminated ? "out" : ""}" title="T${t.tier} ${t.team}: ${t.total} pts${t.eliminated ? " (eliminated)" : ""}">${flag(t.team)}</span>`
         ).join("");
-        return `<tr class="${r.label === "Me" ? "mine" : ""}">
-          <td>${i + 1}</td><td><strong>${r.label}</strong></td>
+        return `<tr data-label="${r.label}" class="${r.label === view ? "viewing" : ""}">
+          <td>${i + 1}</td><td><strong>${r.label}</strong>${r.label === view ? ' <span class="viewtag">viewing</span>' : ""}</td>
           <td class="lbpts">${r.entry.total}</td>
           <td>${sim ? Math.round(sim.mean) : "–"}</td>
           <td>${sim ? fmtPct(sim.pWin) : "–"}</td>
@@ -131,6 +150,13 @@
           <td class="lbflags">${flags}</td>
         </tr>`;
       }).join("") + "</tbody></table>";
+    el.querySelectorAll("tr[data-label]").forEach(tr => {
+      tr.addEventListener("click", () => {
+        view = tr.dataset.label;
+        render();
+        renderHistogram();
+      });
+    });
   }
 
   function renderPicks(entry) {
@@ -177,8 +203,8 @@
     return `vs ${flag(opp)} ${opp}`;
   }
 
-  function renderGroups() {
-    const myNames = new Set(WC.MY_PICKS.map(p => p.name));
+  function renderGroups(cur) {
+    const myNames = pickNames(cur);
     const el = $("#groupsGrid");
     el.innerHTML = Object.entries(snap.groups).map(([letter, rows]) => {
       const hasPick = rows.some(r => myNames.has(r.name));
@@ -203,8 +229,8 @@
     } else tt.innerHTML = "";
   }
 
-  function renderSchedule() {
-    const myNames = new Set(WC.MY_PICKS.map(p => p.name));
+  function renderSchedule(cur) {
+    const myNames = pickNames(cur);
     const ms = snap.matches.filter(m => myNames.has(m.homeName) || myNames.has(m.awayName))
       .sort((a, b) => (a.utc || "").localeCompare(b.utc || ""));
     const byDay = {};
@@ -228,12 +254,13 @@
   }
 
   function renderHistogram() {
-    if (!simResult) return;
+    const ent = simEntrant(view);
+    if (!ent) return;
     const cv = $("#histo"), ctx = cv.getContext("2d");
     const W = cv.width = cv.clientWidth * devicePixelRatio;
     const H = cv.height = 220 * devicePixelRatio;
     ctx.clearRect(0, 0, W, H);
-    const totals = simResult.totals;
+    const totals = ent.totals;
     const min = totals[0], max = totals[totals.length - 1];
     const nb = 40, bins = new Array(nb).fill(0);
     for (const t of totals) bins[Math.min(nb - 1, Math.floor((t - min) / (max - min + 1e-9) * nb))]++;
@@ -257,7 +284,7 @@
       ctx.textAlign = x > W * 0.8 ? "right" : "left";
       ctx.fillText(label, x + (x > W * 0.8 ? -6 : 6) * devicePixelRatio, (14 + yOff) * devicePixelRatio);
     };
-    mark(simResult.p50, css.getPropertyValue("--ink").trim() || "#fff", `my median ${Math.round(simResult.p50)}`, 0);
+    mark(ent.p50, css.getPropertyValue("--ink").trim() || "#fff", `${view === "Me" ? "my" : view + "'s"} median ${Math.round(ent.p50)}`, 0);
     mark(simResult.winningMedian, "#fbbf24", `typical winning score ${Math.round(simResult.winningMedian)}`, 16);
     // x axis labels
     ctx.fillStyle = css.getPropertyValue("--muted").trim() || "#888";

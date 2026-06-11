@@ -107,7 +107,14 @@ h2 { font-size: 1.15rem; margin: 0 0 14px; }
 .lbtable { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; border-spacing: 0; overflow: hidden; font-size: 0.9rem; }
 .lbtable th { padding: 10px 14px 6px; }
 .lbtable td { padding: 8px 14px; }
-.lbtable tr.mine td { background: var(--mine); }
+.lbtable tbody tr { cursor: pointer; }
+.lbtable tbody tr:hover td { background: rgba(255, 255, 255, 0.05); }
+.lbtable tr.viewing td { background: var(--mine); }
+.lbtable tr.viewing td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.viewtag {
+  background: var(--accent); color: #06281a; font-size: 0.62rem; font-weight: 800;
+  border-radius: 6px; padding: 2px 6px; margin-left: 6px; vertical-align: middle;
+}
 .lbpts { font-weight: 800; font-size: 1.05rem; }
 .lbflags { font-size: 1.15rem; letter-spacing: 2px; white-space: nowrap; }
 .lbflag.out { opacity: 0.3; filter: saturate(0.3); }

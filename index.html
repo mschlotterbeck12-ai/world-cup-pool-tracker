@@ -15,7 +15,7 @@
   <div class="headerstats">
     <div class="stat big">
       <div class="statval"><span id="totalPts">0</span><span id="totalLiveBadge" class="pulse" style="display:none">LIVE</span></div>
-      <div class="statlabel">my points</div>
+      <div class="statlabel" id="ptsLabel">my points</div>
     </div>
     <div class="stat accent">
       <div class="statval" id="pWin">–</div>
@@ -50,12 +50,12 @@
   </section>
 
   <section>
-    <h2>My teams</h2>
+    <h2 id="teamsTitle">My teams</h2>
     <div id="picksGrid" class="picksgrid"></div>
   </section>
 
   <section>
-    <h2>Where I could finish <span class="h2note">Monte Carlo over the rest of the tournament</span></h2>
+    <h2>Where <span id="histoWho">I</span> could finish <span class="h2note">Monte Carlo over the rest of the tournament</span></h2>
     <canvas id="histo"></canvas>
   </section>
 
