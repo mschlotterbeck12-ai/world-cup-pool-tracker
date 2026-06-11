@@ -1,5 +1,11 @@
 # World Cup 2026 Pool Tracker
 
+**Live site:** https://mschlotterbeck12-ai.github.io/world-cup-pool-tracker/
+
+Hosted on GitHub Pages. A GitHub Action refreshes the FotMob data every 30 minutes
+(plus each visitor's browser fetches live updates directly), so the site stays
+current without this computer being on.
+
 Tracks my 12-team entry in Dan Lynch's World Cup pool: live points from FotMob,
 plus Monte Carlo odds of winning the pool.
 
