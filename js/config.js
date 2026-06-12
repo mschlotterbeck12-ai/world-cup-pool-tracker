@@ -24,7 +24,7 @@ WC.MY_ENTRY_NAME = "Matthew Schlotterbeck";   // which sheet entry is mine
 WC.MY_LABEL = "Matt";                          // display name for my entry
 WC.ENTRY_LABELS = {                            // friendlier display names
   "Mike Schlotterbeck": "Dad (Mike)",
-  "Sam Rutan - 1": "Evan ❓ (Sam Rutan-1)",    // Evan's exact picks — confirm with him
+  "Sam Rutan - 1": "Evan and Sam",
 };
 
 // ---- Pool tiers (for generating rival entries) ----
