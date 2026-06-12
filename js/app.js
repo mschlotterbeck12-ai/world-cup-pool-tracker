@@ -98,6 +98,7 @@
     renderPicks(cur.entry);
     renderGroups(cur);
     renderSchedule(cur);
+    renderFamChart();
     $("#fetchedAt").textContent = "Data: " + new Date(snap.fetchedAt).toLocaleString();
   }
 
@@ -156,7 +157,12 @@
     if (entries.length < 2) { el.parentElement.style.display = "none"; return; }
     el.parentElement.style.display = "";
     const rows = entries.slice().sort((a, b) => b.entry.total - a.entry.total);
-    const myRank = rows.findIndex(r => r.label === "Me") + 1;
+    // competition ranking: tied scores share the same rank
+    const ranks = [];
+    rows.forEach((r, i) => {
+      ranks[i] = i > 0 && r.entry.total === rows[i - 1].entry.total ? ranks[i - 1] : i + 1;
+    });
+    const myRank = ranks[rows.findIndex(r => r.label === "Me")];
     $("#myRank").textContent = `#${myRank}`;
     $("#myRankOf").textContent = `of ${rows.length} entries`;
     const rowHtml = (r, rank) => {
@@ -178,7 +184,7 @@
       </tr></thead>`;
     // Family mini-board pinned above the full pool (rank = overall pool rank)
     const familyLabels = new Set(["Me", ...Object.values(WC.ENTRY_LABELS)]);
-    const famRows = rows.map((r, i) => ({ r, rank: i + 1 })).filter(x => familyLabels.has(x.r.label));
+    const famRows = rows.map((r, i) => ({ r, rank: ranks[i] })).filter(x => familyLabels.has(x.r.label));
     const famHtml = famRows.length > 1
       ? `<h3 class="lbsub">Family</h3><div class="lbfam"><table class="lbtable">${head}<tbody>` +
         famRows.map(x => rowHtml(x.r, x.rank)).join("") + `</tbody></table></div>
@@ -186,7 +192,7 @@
       : "";
     el.innerHTML = famHtml +
       `<div class="lbwrap"><table class="lbtable">${head}<tbody>` +
-      rows.map((r, i) => rowHtml(r, i + 1)).join("") + "</tbody></table></div>";
+      rows.map((r, i) => rowHtml(r, ranks[i])).join("") + "</tbody></table></div>";
     el.querySelectorAll("tr[data-label]").forEach(tr => {
       tr.addEventListener("click", () => {
         view = tr.dataset.label;
@@ -288,6 +294,106 @@
           ${live ? '<span class="pulse">LIVE</span>' : ""}
         </div>`;
       }).join("")}</div>`).join("");
+  }
+
+  // ---- family race chart: points (solid) + pool rank (dashed) per gameday ----
+  const FAM_COLORS = { "Me": "#4ade80" };  // others assigned from palette below
+  const FAM_PALETTE = ["#60a5fa", "#fbbf24", "#f472b6", "#c084fc"];
+  let historyCache = { key: null, data: null };
+
+  function familyHistory() {
+    const key = snap.fetchedAt + "|" + JSON.stringify(settings.scoring);
+    if (historyCache.key === key) return historyCache.data;
+    const entries = scoredEntries();
+    const famLabels = entries.map(e => e.label)
+      .filter(l => l === "Me" || Object.values(WC.ENTRY_LABELS).includes(l));
+    const data = WCHistory.computeHistory(snap, entries, settings.scoring, famLabels);
+    historyCache = { key, data };
+    return data;
+  }
+
+  function famColor(label, i) { return FAM_COLORS[label] || FAM_PALETTE[i % FAM_PALETTE.length]; }
+
+  function renderFamChart() {
+    const sec = $("#famChartSection");
+    const hist = familyHistory();
+    if (!hist.days.length || hist.series.length < 2) { sec.style.display = "none"; return; }
+    sec.style.display = "";
+    let pi = 0;
+    const colors = hist.series.map(s => s.label === "Me" ? famColor("Me") : famColor(s.label, pi++));
+    $("#famLegend").innerHTML = hist.series.map((s, i) =>
+      `<span class="key"><span class="swatch" style="background:${colors[i]}"></span>${s.label === "Me" ? "Me (Matthew)" : s.label}</span>`
+    ).join("") + `<span class="key">rank axis: 1–${hist.fieldSize}</span>`;
+
+    const cv = $("#famChart"), ctx = cv.getContext("2d");
+    const dpr = devicePixelRatio || 1;
+    const W = cv.width = cv.clientWidth * dpr;
+    const H = cv.height = 280 * dpr;
+    ctx.clearRect(0, 0, W, H);
+    const css = getComputedStyle(document.documentElement);
+    const muted = css.getPropertyValue("--muted").trim() || "#8896b3";
+    const line = css.getPropertyValue("--line").trim() || "#233354";
+    const padL = 46 * dpr, padR = 86 * dpr, padT = 16 * dpr, padB = 30 * dpr;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const n = hist.days.length;
+    const x = (i) => padL + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+
+    // points axis (left): 0 .. nice max
+    const maxPts = Math.max(10, ...hist.series.flatMap(s => s.points));
+    const ptsTop = Math.ceil(maxPts * 1.15 / 10) * 10;
+    const yPts = (v) => padT + plotH - (v / ptsTop) * plotH;
+    // rank axis (right): 1 (top) .. field size (bottom)
+    const maxRank = hist.fieldSize;
+    const yRank = (r) => padT + ((r - 1) / (maxRank - 1)) * plotH;
+
+    ctx.font = `${11 * dpr}px -apple-system, sans-serif`;
+    // gridlines + left labels (points)
+    const steps = 5;
+    for (let g = 0; g <= steps; g++) {
+      const v = (ptsTop / steps) * g, y = yPts(v);
+      ctx.strokeStyle = line; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+      ctx.fillStyle = muted; ctx.textAlign = "right";
+      ctx.fillText(String(Math.round(v)), padL - 8 * dpr, y + 4 * dpr);
+    }
+    // right labels (rank), pinned to the far right edge
+    ctx.textAlign = "right";
+    for (const r of [1, Math.round(maxRank / 4), Math.round(maxRank / 2), Math.round(3 * maxRank / 4), maxRank]) {
+      ctx.fillStyle = muted;
+      ctx.fillText("#" + r, W - 6 * dpr, yRank(r) + 4 * dpr);
+    }
+    // x labels (thinned)
+    const every = Math.max(1, Math.ceil(n / 9));
+    ctx.textAlign = "center"; ctx.fillStyle = muted;
+    hist.days.forEach((d, i) => {
+      if (i % every !== 0 && i !== n - 1) return;
+      const dt = new Date(d + "T12:00:00Z");
+      ctx.fillText(dt.toLocaleDateString([], { month: "short", day: "numeric" }), x(i), H - 8 * dpr);
+    });
+
+    const drawLine = (vals, yFn, color, dashed, dy) => {
+      ctx.strokeStyle = color; ctx.lineWidth = (dashed ? 1.6 : 2.6) * dpr;
+      ctx.setLineDash(dashed ? [5 * dpr, 4 * dpr] : []);
+      ctx.beginPath();
+      vals.forEach((v, i) => { const X = x(i), Y = yFn(v) + dy; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+      ctx.stroke(); ctx.setLineDash([]);
+      if (!dashed) {
+        ctx.fillStyle = color;
+        vals.forEach((v, i) => { ctx.beginPath(); ctx.arc(x(i), yFn(v) + dy, 3 * dpr, 0, 7); ctx.fill(); });
+      }
+    };
+    // tiny per-person vertical offset so identical lines (shared picks) stay visible
+    const off = (i) => (i - (hist.series.length - 1) / 2) * 2.4 * dpr;
+    hist.series.forEach((s, i) => drawLine(s.ranks, yRank, colors[i] + "99", true, off(i)));
+    hist.series.forEach((s, i) => drawLine(s.points, yPts, colors[i], false, off(i)));
+    // end-of-line point totals, nudged apart if overlapping
+    const ends = hist.series.map((s, i) => ({ y: yPts(s.points[n - 1]), v: s.points[n - 1], c: colors[i] }))
+      .sort((a, b) => a.y - b.y);
+    for (let i = 1; i < ends.length; i++) {
+      if (ends[i].y - ends[i - 1].y < 14 * dpr) ends[i].y = ends[i - 1].y + 14 * dpr;
+    }
+    ctx.textAlign = "left"; ctx.font = `bold ${12 * dpr}px -apple-system, sans-serif`;
+    for (const e of ends) { ctx.fillStyle = e.c; ctx.fillText(String(e.v), x(n - 1) + 8 * dpr, e.y + 4 * dpr); }
   }
 
   function renderHistogram() {
@@ -412,7 +518,7 @@
     $("#settingsBtn").addEventListener("click", openSettings);
     $("#settingsSave").addEventListener("click", (e) => { e.preventDefault(); saveSettingsFromDlg(); });
     $("#settingsCancel").addEventListener("click", (e) => { e.preventDefault(); $("#settingsDlg").close(); });
-    window.addEventListener("resize", renderHistogram);
+    window.addEventListener("resize", () => { renderHistogram(); renderFamChart(); });
     doRefresh(true);          // try to get fresher data than the baked snapshot
     setTimeout(autoRefreshLoop, 60e3);
   });

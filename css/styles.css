@@ -136,6 +136,12 @@ h2 { font-size: 1.15rem; margin: 0 0 14px; }
 /* ---------- histogram ---------- */
 #histo { width: 100%; height: 220px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
 
+/* ---------- family race chart ---------- */
+#famChart { width: 100%; height: 280px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+.chartlegend { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 10px; font-size: 0.85rem; color: var(--muted); }
+.chartlegend .key { display: flex; align-items: center; gap: 7px; }
+.chartlegend .swatch { width: 22px; height: 4px; border-radius: 2px; display: inline-block; }
+
 /* ---------- groups ---------- */
 .groupsgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)); gap: 14px; }
 .grouptable { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px 12px; }
