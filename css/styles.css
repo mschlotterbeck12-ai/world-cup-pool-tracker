@@ -104,7 +104,12 @@ h2 { font-size: 1.15rem; margin: 0 0 14px; }
 .warn { color: var(--accent2); font-size: 0.78rem; }
 
 /* ---------- leaderboard ---------- */
-.lbtable { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; border-spacing: 0; overflow: hidden; font-size: 0.9rem; }
+.lbwrap {
+  max-height: 480px; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+}
+.lbtable { width: 100%; border-spacing: 0; font-size: 0.9rem; }
+.lbtable thead th { position: sticky; top: 0; background: var(--panel2); z-index: 1; }
 .lbtable th { padding: 10px 14px 6px; }
 .lbtable td { padding: 8px 14px; }
 .lbtable tbody tr { cursor: pointer; }

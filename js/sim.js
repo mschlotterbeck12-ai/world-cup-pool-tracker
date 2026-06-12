@@ -258,14 +258,14 @@
     return { groupTeams, groupMatches, completeGroups, koReal };
   }
 
-  // ---------- main entry: run N sims, return aggregates ----------
-  function run(snap, settings, realRivals, onProgress, onDone) {
+  // ---------- main entry: run N sims over the real field, return aggregates ----------
+  // entrants: [{label, picks}] with "Me" first. If the field setting exceeds the
+  // real entries (no sheet loaded), the remainder is filled with random rivals.
+  function run(snap, settings, entrants, onProgress, onDone) {
     const data = prepData(snap);
     const opts = { hostBoost: settings.hostBoost };
     const scoring = settings.scoring;
     const N = settings.nSims;
-    const entrants = [{ label: "Me", picks: WC.MY_PICKS },
-      ...realRivals.map(r => ({ label: r.label, picks: r.picks }))];
     const entAgg = entrants.map(() => ({ wins: 0, top3: 0, sum: 0 }));
     const entSeries = entrants.map(() => []);
     const nRandomRivals = Math.max(0, settings.fieldSize - entrants.length);
@@ -293,16 +293,22 @@
         entTotals.forEach((t, ei) => entSeries[ei].push(t));
         const allTotals = entTotals.slice();
         for (let k = 0; k < nRandomRivals; k++) allTotals.push(scoreSimEntry(randomRival(), rec, scoring));
-        entrants.forEach((e, ei) => {
+        const sorted = allTotals.slice().sort((a, b) => a - b);
+        for (let ei = 0; ei < entrants.length; ei++) {
           const t = entTotals[ei];
-          let above = 0, tied = 0;
-          allTotals.forEach((x, xi) => { if (xi === ei) return; if (x > t) above++; else if (x === t) tied++; });
-          const place = above + 1 + (tied ? Math.floor(Math.random() * (tied + 1)) : 0);
+          // binary search: entries strictly above t, and ties (excluding self)
+          let lo = 0, hi = sorted.length;
+          while (lo < hi) { const m = (lo + hi) >> 1; if (sorted[m] <= t) lo = m + 1; else hi = m; }
+          const above = sorted.length - lo;
+          let lo2 = 0, hi2 = lo;
+          while (lo2 < hi2) { const m = (lo2 + hi2) >> 1; if (sorted[m] < t) lo2 = m + 1; else hi2 = m; }
+          const tied = lo - lo2 - 1;
+          const place = above + 1 + (tied > 0 ? Math.floor(Math.random() * (tied + 1)) : 0);
           if (place === 1) entAgg[ei].wins++;
           if (place <= 3) entAgg[ei].top3++;
           entAgg[ei].sum += t;
-        });
-        winningTotals.push(Math.max(...allTotals));
+        }
+        winningTotals.push(sorted[sorted.length - 1]);
       }
       if (onProgress) onProgress(i / N);
       if (i < N) setTimeout(chunk, 0);
@@ -322,6 +328,7 @@
       }
       onDone({
         n: N,
+        nRandom: nRandomRivals,
         entrants: entrants.map((e, i) => {
           const tt = entSeries[i].sort((a, b) => a - b);
           return {

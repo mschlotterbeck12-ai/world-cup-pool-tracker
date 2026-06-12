@@ -51,13 +51,34 @@
   const fmtPct = (p) => p >= 0.995 ? "100%" : p < 0.005 && p > 0 ? "<1%" : Math.round(p * 100) + "%";
   const fmtTime = (utc) => new Date(utc).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-  // All real entries (mine + parsed rivals), scored against current data.
-  function scoredEntries() {
+  // The real field: entries baked from Dan's sheet (data/entries.js), with "Me"
+  // first, plus any extra entries typed into Settings (sheet duplicates skipped).
+  function baseEntries() {
     const { rivals } = parseRivals(settings.rivalsText);
-    return [
-      { label: "Me", picks: WC.MY_PICKS },
-      ...rivals.map(r => ({ label: r.label, picks: r.picks })),
-    ].map(e => ({ ...e, entry: WCScoring.scoreEntry(e.picks, snap, settings.scoring, settings) }));
+    let list;
+    if (window.WC_POOL_ENTRIES && window.WC_POOL_ENTRIES.length) {
+      list = window.WC_POOL_ENTRIES.map(e => ({
+        label: e.name === WC.MY_ENTRY_NAME ? "Me" : (WC.ENTRY_LABELS[e.name] || e.name),
+        picks: e.teams.map((t, i) => ({ tier: i + 1, name: t })),
+      }));
+      const me = list.findIndex(e => e.label === "Me");
+      if (me > 0) list.unshift(list.splice(me, 1)[0]);
+      else if (me < 0) list.unshift({ label: "Me", picks: WC.MY_PICKS });
+    } else {
+      list = [{ label: "Me", picks: WC.MY_PICKS }];
+    }
+    const sig = (picks) => picks.map(p => p.name).join("|");
+    const have = new Set(list.map(e => sig(e.picks)));
+    for (const r of rivals) {
+      if (!have.has(sig(r.picks))) { list.push({ label: r.label, picks: r.picks }); have.add(sig(r.picks)); }
+    }
+    return list;
+  }
+
+  // All real entries, scored against current data.
+  function scoredEntries() {
+    return baseEntries().map(e =>
+      ({ ...e, entry: WCScoring.scoreEntry(e.picks, snap, settings.scoring, settings) }));
   }
   function simEntrant(label) {
     return simResult && simResult.entrants ? simResult.entrants.find(e => e.label === label) : null;
@@ -93,7 +114,9 @@
       $("#projPts").textContent = Math.round(ent.p50);
       $("#projRange").textContent = `${Math.round(ent.p10)}–${Math.round(ent.p90)}`;
       $("#winningMedian").textContent = Math.round(simResult.winningMedian);
-      $("#fieldNote").textContent = `vs ${settings.fieldSize - 1} rivals (${parseRivals(settings.rivalsText).rivals.length} real, rest simulated) · ${simResult.n.toLocaleString()} sims`;
+      $("#fieldNote").textContent = `field: ${simResult.entrants.length} real entries` +
+        (simResult.nRandom ? ` + ${simResult.nRandom} simulated` : "") +
+        ` · ${simResult.n.toLocaleString()} sims`;
     }
   }
 
@@ -133,7 +156,10 @@
     if (entries.length < 2) { el.parentElement.style.display = "none"; return; }
     el.parentElement.style.display = "";
     const rows = entries.slice().sort((a, b) => b.entry.total - a.entry.total);
-    el.innerHTML = `<table class="lbtable"><thead><tr>
+    const myRank = rows.findIndex(r => r.label === "Me") + 1;
+    $("#myRank").textContent = `#${myRank}`;
+    $("#myRankOf").textContent = `of ${rows.length} entries`;
+    el.innerHTML = `<div class="lbwrap"><table class="lbtable"><thead><tr>
         <th>#</th><th>Entry</th><th>Points</th><th>Projected</th><th>Win</th><th>Top 3</th><th>Teams</th>
       </tr></thead><tbody>` +
       rows.map((r, i) => {
@@ -141,7 +167,7 @@
         const flags = r.entry.teams.map(t =>
           `<span class="lbflag ${t.eliminated ? "out" : ""}" title="T${t.tier} ${t.team}: ${t.total} pts${t.eliminated ? " (eliminated)" : ""}">${flag(t.team)}</span>`
         ).join("");
-        return `<tr data-label="${r.label}" class="${r.label === view ? "viewing" : ""}">
+        return `<tr data-label="${r.label}" class="${r.label === view ? "viewing" : ""}${r.label === "Me" ? " mine" : ""}">
           <td>${i + 1}</td><td><strong>${r.label}</strong>${r.label === view ? ' <span class="viewtag">viewing</span>' : ""}</td>
           <td class="lbpts">${r.entry.total}</td>
           <td>${sim ? Math.round(sim.mean) : "–"}</td>
@@ -149,7 +175,7 @@
           <td>${sim ? fmtPct(sim.pTop3) : "–"}</td>
           <td class="lbflags">${flags}</td>
         </tr>`;
-      }).join("") + "</tbody></table>";
+      }).join("") + "</tbody></table></div>";
     el.querySelectorAll("tr[data-label]").forEach(tr => {
       tr.addEventListener("click", () => {
         view = tr.dataset.label;
@@ -294,10 +320,10 @@
 
   // ---------- simulation ----------
   function runSim() {
-    const { rivals, errors } = parseRivals(settings.rivalsText);
+    const { errors } = parseRivals(settings.rivalsText);
     if (errors.length) console.warn("rival parse:", errors);
     $("#simStatus").textContent = "Simulating…";
-    WCSim.run(snap, settings, rivals,
+    WCSim.run(snap, settings, baseEntries(),
       (p) => { $("#simStatus").textContent = `Simulating… ${Math.round(p * 100)}%`; },
       (res) => {
         simResult = res;

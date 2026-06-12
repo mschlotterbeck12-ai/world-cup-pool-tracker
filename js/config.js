@@ -19,6 +19,13 @@ WC.MY_PICKS = [
   { tier: 12, name: "Ghana",       fotmobId: "6714" },
 ];
 
+// ---- Real pool field (data/entries.js, baked from Dan's Google Sheet) ----
+WC.MY_ENTRY_NAME = "Matthew Schlotterbeck";   // which sheet entry is "Me"
+WC.ENTRY_LABELS = {                            // friendlier display names
+  "Mike Schlotterbeck": "Dad (Mike)",
+  "Sam Rutan - 1": "Evan ❓ (Sam Rutan-1)",    // Evan's exact picks — confirm with him
+};
+
 // ---- Pool tiers (for generating rival entries) ----
 WC.TIERS = {
   1:  ["France", "Spain", "Argentina", "England"],
@@ -177,11 +184,9 @@ WC.DEFAULT_SETTINGS = {
   hostBoost: 50,          // Elo boost for USA / Mexico / Canada
   countLiveGoals: true,
   scoring: WC.DEFAULT_SCORING,
-  // real rival entries, one per line: "Name: France, Brazil, ..."
-  rivalsText: [
-    "Evan: France, Portugal, Belgium, Mexico, Switzerland, Ecuador, Egypt, Ivory Coast, Scotland, Uzbekistan, Bosnia and Herzegovina, Ghana",
-    "Dad: Argentina, Portugal, Germany, Mexico, Switzerland, Ecuador, Canada, Sweden, DR Congo, Uzbekistan, Bosnia and Herzegovina, Ghana",
-  ].join("\n"),
+  // Extra entries beyond the baked sheet, one per line: "Name: France, Brazil, ..."
+  // (duplicates of sheet entries are ignored automatically)
+  rivalsText: "",
 };
 
 WC.HOSTS = new Set(["USA", "Mexico", "Canada"]);
