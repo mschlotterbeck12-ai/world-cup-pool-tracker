@@ -34,16 +34,20 @@ The page also refreshes itself from FotMob in the browser (via CORS proxies) —
 automatically every 90s while a match is live. `./update.sh` is the fallback if
 the proxies are down; it rebuilds `data/snapshot.js`, which the page loads on start.
 
-## Family rivals
+## The real field
 
-Brother's and Dad's entries are pre-loaded (Settings → "Real rival entries"):
+All **201 real entries** from Dan's pool sheet are baked into `data/entries.js`
+(via `scripts/sheet_to_entries.py`, which reads the sheet's public CSV export).
+The win/top-3 odds are computed against the actual field — no simulated rivals.
+The **Pool standings** leaderboard ranks everyone by live points; click any row
+to view that entry's full dashboard. If Dan edits the sheet, re-run:
 
-- **Brother:** France, Portugal, Belgium, Mexico, Switzerland, Ecuador, Egypt, Ivory Coast, Scotland, Uzbekistan, Bosnia, Ghana
-- **Dad:** Argentina, Portugal, Germany, Mexico, Switzerland, Ecuador, Canada, Sweden, DR Congo, Uzbekistan, Bosnia, Ghana
+```sh
+python3 scripts/sheet_to_entries.py && git commit -am "refresh entries" && git push
+```
 
-The **Pool standings** section ranks all real entries by live points with each
-entry's projected final score and win/top-3 odds. Add more rivals in Settings as
-Dan shares them.
+Family labels (set in `js/config.js` → `WC.ENTRY_LABELS`): Dad = Mike Schlotterbeck;
+Evan's picks appear in the sheet under "Sam Rutan - 1" (flagged with ❓ until confirmed).
 
 ## What's on the page
 
