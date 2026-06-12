@@ -171,7 +171,7 @@
       const flags = r.entry.teams.map(t =>
         `<span class="lbflag ${t.eliminated ? "out" : ""}" title="T${t.tier} ${t.team}: ${t.total} pts${t.eliminated ? " (eliminated)" : ""}">${flag(t.team)}</span>`
       ).join("");
-      return `<tr data-label="${r.label}" class="${r.label === view ? "viewing" : ""}${r.label === WC.MY_LABEL ? " mine" : ""}">
+      return `<tr data-label="${r.label}" class="${r.label === view ? "viewing" : ""}">
         <td>${rank}</td><td><strong>${r.label}</strong>${r.label === view ? ' <span class="viewtag">viewing</span>' : ""}</td>
         <td class="lbpts">${r.entry.total}</td>
         <td>${sim ? Math.round(sim.mean) : "–"}</td>
