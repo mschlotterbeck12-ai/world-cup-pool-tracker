@@ -6,7 +6,7 @@
   let snap = null;
   let settings = loadSettings();
   let simResult = null;
-  let view = "Me";   // which entry the dashboard is showing
+  let view = WC.MY_LABEL;   // which entry the dashboard is showing
 
   function loadSettings() {
     let s = {};
@@ -58,14 +58,14 @@
     let list;
     if (window.WC_POOL_ENTRIES && window.WC_POOL_ENTRIES.length) {
       list = window.WC_POOL_ENTRIES.map(e => ({
-        label: e.name === WC.MY_ENTRY_NAME ? "Me" : (WC.ENTRY_LABELS[e.name] || e.name),
+        label: e.name === WC.MY_ENTRY_NAME ? WC.MY_LABEL : (WC.ENTRY_LABELS[e.name] || e.name),
         picks: e.teams.map((t, i) => ({ tier: i + 1, name: t })),
       }));
-      const me = list.findIndex(e => e.label === "Me");
+      const me = list.findIndex(e => e.label === WC.MY_LABEL);
       if (me > 0) list.unshift(list.splice(me, 1)[0]);
-      else if (me < 0) list.unshift({ label: "Me", picks: WC.MY_PICKS });
+      else if (me < 0) list.unshift({ label: WC.MY_LABEL, picks: WC.MY_PICKS });
     } else {
-      list = [{ label: "Me", picks: WC.MY_PICKS }];
+      list = [{ label: WC.MY_LABEL, picks: WC.MY_PICKS }];
     }
     const sig = (picks) => picks.map(p => p.name).join("|");
     const have = new Set(list.map(e => sig(e.picks)));
@@ -88,10 +88,10 @@
     const entries = scoredEntries();
     const cur = entries.find(e => e.label === view) || entries[0];
     view = cur.label;
-    const possessive = cur.label === "Me" ? "My" : `${cur.label}'s`;
+    const possessive = `${cur.label}'s`;
     $("#teamsTitle").textContent = `${possessive} teams`;
-    $("#histoWho").textContent = cur.label === "Me" ? "I" : cur.label;
-    $("#ptsLabel").textContent = `${possessive.toLowerCase()} points`;
+    $("#histoWho").textContent = cur.label;
+    $("#ptsLabel").textContent = `${possessive} points`;
     renderHeader(cur);
     renderLive(cur);
     renderLeaderboard(entries);
@@ -99,6 +99,7 @@
     renderGroups(cur);
     renderSchedule(cur);
     renderFamChart();
+    renderKeys();
     $("#fetchedAt").textContent = "Data: " + new Date(snap.fetchedAt).toLocaleString();
   }
 
@@ -162,7 +163,7 @@
     rows.forEach((r, i) => {
       ranks[i] = i > 0 && r.entry.total === rows[i - 1].entry.total ? ranks[i - 1] : i + 1;
     });
-    const myRank = ranks[rows.findIndex(r => r.label === "Me")];
+    const myRank = ranks[rows.findIndex(r => r.label === WC.MY_LABEL)];
     $("#myRank").textContent = `#${myRank}`;
     $("#myRankOf").textContent = `of ${rows.length} entries`;
     const rowHtml = (r, rank) => {
@@ -170,7 +171,7 @@
       const flags = r.entry.teams.map(t =>
         `<span class="lbflag ${t.eliminated ? "out" : ""}" title="T${t.tier} ${t.team}: ${t.total} pts${t.eliminated ? " (eliminated)" : ""}">${flag(t.team)}</span>`
       ).join("");
-      return `<tr data-label="${r.label}" class="${r.label === view ? "viewing" : ""}${r.label === "Me" ? " mine" : ""}">
+      return `<tr data-label="${r.label}" class="${r.label === view ? "viewing" : ""}${r.label === WC.MY_LABEL ? " mine" : ""}">
         <td>${rank}</td><td><strong>${r.label}</strong>${r.label === view ? ' <span class="viewtag">viewing</span>' : ""}</td>
         <td class="lbpts">${r.entry.total}</td>
         <td>${sim ? Math.round(sim.mean) : "–"}</td>
@@ -183,7 +184,7 @@
         <th>#</th><th>Entry</th><th>Points</th><th>Projected</th><th>Win</th><th>Top 3</th><th>Teams</th>
       </tr></thead>`;
     // Family mini-board pinned above the full pool (rank = overall pool rank)
-    const familyLabels = new Set(["Me", ...Object.values(WC.ENTRY_LABELS)]);
+    const familyLabels = new Set([WC.MY_LABEL, ...Object.values(WC.ENTRY_LABELS)]);
     const famRows = rows.map((r, i) => ({ r, rank: ranks[i] })).filter(x => familyLabels.has(x.r.label));
     const famHtml = famRows.length > 1
       ? `<h3 class="lbsub">Family</h3><div class="lbfam"><table class="lbtable">${head}<tbody>` +
@@ -296,23 +297,84 @@
       }).join("")}</div>`).join("");
   }
 
-  // ---- family race chart: points (solid) + pool rank (dashed) per gameday ----
-  const FAM_COLORS = { "Me": "#4ade80" };  // others assigned from palette below
+  // ---- family race chart: points or pool rank per gameday ----
   const FAM_PALETTE = ["#60a5fa", "#fbbf24", "#f472b6", "#c084fc"];
   let historyCache = { key: null, data: null };
+
+  function familyLabels() {
+    return baseEntries().map(e => e.label)
+      .filter(l => l === WC.MY_LABEL || Object.values(WC.ENTRY_LABELS).includes(l));
+  }
 
   function familyHistory() {
     const key = snap.fetchedAt + "|" + JSON.stringify(settings.scoring);
     if (historyCache.key === key) return historyCache.data;
-    const entries = scoredEntries();
-    const famLabels = entries.map(e => e.label)
-      .filter(l => l === "Me" || Object.values(WC.ENTRY_LABELS).includes(l));
-    const data = WCHistory.computeHistory(snap, entries, settings.scoring, famLabels);
+    const data = WCHistory.computeHistory(snap, scoredEntries(), settings.scoring, familyLabels());
     historyCache = { key, data };
     return data;
   }
 
-  function famColor(label, i) { return FAM_COLORS[label] || FAM_PALETTE[i % FAM_PALETTE.length]; }
+  function famColor(label, i) { return label === WC.MY_LABEL ? "#4ade80" : FAM_PALETTE[i % FAM_PALETTE.length]; }
+
+  // ---- "Keys to winning" analysis per family member ----
+  let keysView = WC.MY_LABEL;
+
+  function renderKeys() {
+    const sec = $("#keysSection");
+    const fam = familyLabels();
+    if (!simResult || !simResult.keys || fam.length < 2) { sec.style.display = "none"; return; }
+    sec.style.display = "";
+    if (!fam.includes(keysView)) keysView = fam[0];
+    $("#keysSeg").innerHTML = fam.map(l =>
+      `<button data-keys="${l}" class="${l === keysView ? "active" : ""}">${l}</button>`).join("");
+    $("#keysSeg").querySelectorAll("button").forEach(b =>
+      b.addEventListener("click", () => { keysView = b.dataset.keys; renderKeys(); }));
+
+    const entries = scoredEntries();
+    const e = entries.find(x => x.label === keysView);
+    const ent = simEntrant(keysView);
+    const keys = simResult.keys[keysView] || [];
+    const own = {};
+    for (const be of entries) for (const p of be.picks) own[p.name] = (own[p.name] || 0) + 1;
+    const nEntries = entries.length;
+    const byTeam = {};
+    for (const t of e.entry.teams) byTeam[t.team] = t;
+
+    const milestoneText = (tier) => tier >= 9 ? "advance from the group (2× bonus)"
+      : tier >= 5 ? "reach the quarter-finals" : "reach the semi-finals";
+
+    const summary = ent ? `<div class="keysummary">
+        <span class="chip">${e.entry.total} pts now</span>
+        <span class="chip">projected ${Math.round(ent.p50)}</span>
+        <span class="chip">win ${fmtPct(ent.pWin)}</span>
+        <span class="chip">top 3 ${fmtPct(ent.pTop3)}</span>
+        <span class="chip">typical winning score ${Math.round(simResult.winningMedian)}</span>
+      </div>` : "";
+
+    const alive = keys.filter(k => byTeam[k.team] && !byTeam[k.team].eliminated)
+      .sort((a, b) => b.delta - a.delta).slice(0, 5);
+    const rows = alive.map((k, i) => {
+      const o = own[k.team] || 0;
+      const lev = o <= nEntries * 0.1 ? `only ${o}/${nEntries} entries have them — pure separation`
+        : o >= nEntries * 0.5 ? `${o}/${nEntries} entries share this pick — little separation`
+        : `owned by ${o}/${nEntries} entries`;
+      return `<div class="keyrow">
+        <span class="keynum">${i + 1}</span>
+        <span class="flag">${flag(k.team)}</span>
+        <div class="keybody">
+          <strong>${k.team}</strong> <span class="meta">Tier ${k.tier}${WC.DOUBLE_TIERS.has(k.tier) ? ' · <em class="dbl">2×</em>' : ""}</span>
+          <div class="keytext">If they ${milestoneText(k.tier)}: top-3 odds ${fmtPct(k.pTop3IfNo)} → <strong class="up">${fmtPct(k.pTop3IfYes)}</strong>
+            <span class="keymeta">· ${fmtPct(k.pCond)} likely · ${lev}</span></div>
+        </div>
+      </div>`;
+    }).join("");
+
+    const dead = e.entry.teams.filter(t => t.eliminated);
+    const deadNote = dead.length
+      ? `<div class="keynote">💀 Already eliminated: ${dead.map(t => `${flag(t.team)} ${t.team}`).join(", ")} — that upside is gone.</div>`
+      : "";
+    $("#keysContent").innerHTML = summary + rows + deadNote;
+  }
 
   let famMode = "points";   // "points" | "rank"
 
@@ -333,9 +395,9 @@
       ? `pool rank by gameday · #1 = leading all ${hist.fieldSize} entries`
       : "total points by gameday";
     let pi = 0;
-    const colors = hist.series.map(s => s.label === "Me" ? famColor("Me") : famColor(s.label, pi++));
+    const colors = hist.series.map(s => s.label === WC.MY_LABEL ? famColor(s.label) : famColor(s.label, pi++));
     $("#famLegend").innerHTML = hist.series.map((s, i) =>
-      `<span class="key"><span class="swatch" style="background:${colors[i]}"></span>${s.label === "Me" ? "Me (Matthew)" : s.label}</span>`
+      `<span class="key"><span class="swatch" style="background:${colors[i]}"></span>${s.label}</span>`
     ).join("");
 
     const cv = $("#famChart"), ctx = cv.getContext("2d");
@@ -439,7 +501,7 @@
       ctx.textAlign = x > W * 0.8 ? "right" : "left";
       ctx.fillText(label, x + (x > W * 0.8 ? -6 : 6) * devicePixelRatio, (14 + yOff) * devicePixelRatio);
     };
-    mark(ent.p50, css.getPropertyValue("--ink").trim() || "#fff", `${view === "Me" ? "my" : view + "'s"} median ${Math.round(ent.p50)}`, 0);
+    mark(ent.p50, css.getPropertyValue("--ink").trim() || "#fff", `${view}'s median ${Math.round(ent.p50)}`, 0);
     mark(simResult.winningMedian, "#fbbf24", `typical winning score ${Math.round(simResult.winningMedian)}`, 16);
     // x axis labels
     ctx.fillStyle = css.getPropertyValue("--muted").trim() || "#888";
@@ -452,7 +514,7 @@
     const { errors } = parseRivals(settings.rivalsText);
     if (errors.length) console.warn("rival parse:", errors);
     $("#simStatus").textContent = "Simulating…";
-    WCSim.run(snap, settings, baseEntries(),
+    WCSim.run(snap, { ...settings, keyLabels: familyLabels() }, baseEntries(),
       (p) => { $("#simStatus").textContent = `Simulating… ${Math.round(p * 100)}%`; },
       (res) => {
         simResult = res;

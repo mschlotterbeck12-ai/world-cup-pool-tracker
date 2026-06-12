@@ -20,7 +20,8 @@ WC.MY_PICKS = [
 ];
 
 // ---- Real pool field (data/entries.js, baked from Dan's Google Sheet) ----
-WC.MY_ENTRY_NAME = "Matthew Schlotterbeck";   // which sheet entry is "Me"
+WC.MY_ENTRY_NAME = "Matthew Schlotterbeck";   // which sheet entry is mine
+WC.MY_LABEL = "Matt";                          // display name for my entry
 WC.ENTRY_LABELS = {                            // friendlier display names
   "Mike Schlotterbeck": "Dad (Mike)",
   "Sam Rutan - 1": "Evan ❓ (Sam Rutan-1)",    // Evan's exact picks — confirm with him

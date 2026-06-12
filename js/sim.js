@@ -270,6 +270,17 @@
     const entSeries = entrants.map(() => []);
     const nRandomRivals = Math.max(0, settings.fieldSize - entrants.length);
 
+    // "Keys to winning": for selected entrants, track how top-3 odds shift with
+    // each pick's milestone (2x tiers: advance; mid tiers: QF; top tiers: SF).
+    const keyLabels = settings.keyLabels || [];
+    const keyAgg = {};
+    for (const e of entrants) {
+      if (keyLabels.includes(e.label)) {
+        keyAgg[e.label] = e.picks.map(() => ({ cond: 0, condTop3: 0, noTop3: 0 }));
+      }
+    }
+    const milestone = (r, tier) => tier >= 9 ? r.advanced : tier >= 5 ? !!r.reached.QF : !!r.reached.SF;
+
     const winningTotals = [];
     const teamAgg = {};
     for (const name of TEAM_NAMES) {
@@ -307,6 +318,13 @@
           if (place === 1) entAgg[ei].wins++;
           if (place <= 3) entAgg[ei].top3++;
           entAgg[ei].sum += t;
+          const ka = keyAgg[entrants[ei].label];
+          if (ka) {
+            entrants[ei].picks.forEach((p, pk) => {
+              if (milestone(rec[p.name], p.tier)) { ka[pk].cond++; if (place <= 3) ka[pk].condTop3++; }
+              else if (place <= 3) ka[pk].noTop3++;
+            });
+          }
         }
         winningTotals.push(sorted[sorted.length - 1]);
       }
@@ -340,6 +358,15 @@
         }),
         winningMedian: q(winningTotals, 0.50),
         teams,
+        keys: Object.fromEntries(entrants.filter(e => keyAgg[e.label]).map(e => [
+          e.label,
+          e.picks.map((p, pk) => {
+            const a = keyAgg[e.label][pk];
+            const pTop3IfYes = a.cond ? a.condTop3 / a.cond : 0;
+            const pTop3IfNo = (N - a.cond) ? a.noTop3 / (N - a.cond) : 0;
+            return { team: p.name, tier: p.tier, pCond: a.cond / N, pTop3IfYes, pTop3IfNo, delta: pTop3IfYes - pTop3IfNo };
+          }),
+        ])),
       });
     }
     chunk();
