@@ -108,6 +108,15 @@ h2 { font-size: 1.15rem; margin: 0 0 14px; }
   max-height: 480px; overflow-y: auto;
   background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
 }
+.lbfam {
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 14px;
+  overflow: hidden;
+}
+.lbsub {
+  margin: 14px 0 8px; font-size: 0.8rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+}
+.lbsub:first-child { margin-top: 0; }
 .lbtable { width: 100%; border-spacing: 0; font-size: 0.9rem; }
 .lbtable thead th { position: sticky; top: 0; background: var(--panel2); z-index: 1; }
 .lbtable th { padding: 10px 14px 6px; }

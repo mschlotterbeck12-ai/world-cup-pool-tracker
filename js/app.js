@@ -159,23 +159,34 @@
     const myRank = rows.findIndex(r => r.label === "Me") + 1;
     $("#myRank").textContent = `#${myRank}`;
     $("#myRankOf").textContent = `of ${rows.length} entries`;
-    el.innerHTML = `<div class="lbwrap"><table class="lbtable"><thead><tr>
+    const rowHtml = (r, rank) => {
+      const sim = simEntrant(r.label);
+      const flags = r.entry.teams.map(t =>
+        `<span class="lbflag ${t.eliminated ? "out" : ""}" title="T${t.tier} ${t.team}: ${t.total} pts${t.eliminated ? " (eliminated)" : ""}">${flag(t.team)}</span>`
+      ).join("");
+      return `<tr data-label="${r.label}" class="${r.label === view ? "viewing" : ""}${r.label === "Me" ? " mine" : ""}">
+        <td>${rank}</td><td><strong>${r.label}</strong>${r.label === view ? ' <span class="viewtag">viewing</span>' : ""}</td>
+        <td class="lbpts">${r.entry.total}</td>
+        <td>${sim ? Math.round(sim.mean) : "–"}</td>
+        <td>${sim ? fmtPct(sim.pWin) : "–"}</td>
+        <td>${sim ? fmtPct(sim.pTop3) : "–"}</td>
+        <td class="lbflags">${flags}</td>
+      </tr>`;
+    };
+    const head = `<thead><tr>
         <th>#</th><th>Entry</th><th>Points</th><th>Projected</th><th>Win</th><th>Top 3</th><th>Teams</th>
-      </tr></thead><tbody>` +
-      rows.map((r, i) => {
-        const sim = simEntrant(r.label);
-        const flags = r.entry.teams.map(t =>
-          `<span class="lbflag ${t.eliminated ? "out" : ""}" title="T${t.tier} ${t.team}: ${t.total} pts${t.eliminated ? " (eliminated)" : ""}">${flag(t.team)}</span>`
-        ).join("");
-        return `<tr data-label="${r.label}" class="${r.label === view ? "viewing" : ""}${r.label === "Me" ? " mine" : ""}">
-          <td>${i + 1}</td><td><strong>${r.label}</strong>${r.label === view ? ' <span class="viewtag">viewing</span>' : ""}</td>
-          <td class="lbpts">${r.entry.total}</td>
-          <td>${sim ? Math.round(sim.mean) : "–"}</td>
-          <td>${sim ? fmtPct(sim.pWin) : "–"}</td>
-          <td>${sim ? fmtPct(sim.pTop3) : "–"}</td>
-          <td class="lbflags">${flags}</td>
-        </tr>`;
-      }).join("") + "</tbody></table></div>";
+      </tr></thead>`;
+    // Family mini-board pinned above the full pool (rank = overall pool rank)
+    const familyLabels = new Set(["Me", ...Object.values(WC.ENTRY_LABELS)]);
+    const famRows = rows.map((r, i) => ({ r, rank: i + 1 })).filter(x => familyLabels.has(x.r.label));
+    const famHtml = famRows.length > 1
+      ? `<h3 class="lbsub">Family</h3><div class="lbfam"><table class="lbtable">${head}<tbody>` +
+        famRows.map(x => rowHtml(x.r, x.rank)).join("") + `</tbody></table></div>
+        <h3 class="lbsub">Full pool</h3>`
+      : "";
+    el.innerHTML = famHtml +
+      `<div class="lbwrap"><table class="lbtable">${head}<tbody>` +
+      rows.map((r, i) => rowHtml(r, i + 1)).join("") + "</tbody></table></div>";
     el.querySelectorAll("tr[data-label]").forEach(tr => {
       tr.addEventListener("click", () => {
         view = tr.dataset.label;
