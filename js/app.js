@@ -314,16 +314,29 @@
 
   function famColor(label, i) { return FAM_COLORS[label] || FAM_PALETTE[i % FAM_PALETTE.length]; }
 
+  let famMode = "points";   // "points" | "rank"
+
+  function setFamMode(mode) {
+    famMode = mode;
+    $("#famModePoints").classList.toggle("active", mode === "points");
+    $("#famModeRank").classList.toggle("active", mode === "rank");
+    renderFamChart();
+  }
+
   function renderFamChart() {
     const sec = $("#famChartSection");
     const hist = familyHistory();
     if (!hist.days.length || hist.series.length < 2) { sec.style.display = "none"; return; }
     sec.style.display = "";
+    const isRank = famMode === "rank";
+    $("#famChartNote").textContent = isRank
+      ? `pool rank by gameday · #1 = leading all ${hist.fieldSize} entries`
+      : "total points by gameday";
     let pi = 0;
     const colors = hist.series.map(s => s.label === "Me" ? famColor("Me") : famColor(s.label, pi++));
     $("#famLegend").innerHTML = hist.series.map((s, i) =>
       `<span class="key"><span class="swatch" style="background:${colors[i]}"></span>${s.label === "Me" ? "Me (Matthew)" : s.label}</span>`
-    ).join("") + `<span class="key">rank axis: 1–${hist.fieldSize}</span>`;
+    ).join("");
 
     const cv = $("#famChart"), ctx = cv.getContext("2d");
     const dpr = devicePixelRatio || 1;
@@ -333,34 +346,35 @@
     const css = getComputedStyle(document.documentElement);
     const muted = css.getPropertyValue("--muted").trim() || "#8896b3";
     const line = css.getPropertyValue("--line").trim() || "#233354";
-    const padL = 46 * dpr, padR = 86 * dpr, padT = 16 * dpr, padB = 30 * dpr;
+    const padL = 50 * dpr, padR = 56 * dpr, padT = 16 * dpr, padB = 30 * dpr;
     const plotW = W - padL - padR, plotH = H - padT - padB;
     const n = hist.days.length;
     const x = (i) => padL + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
 
-    // points axis (left): 0 .. nice max
-    const maxPts = Math.max(10, ...hist.series.flatMap(s => s.points));
-    const ptsTop = Math.ceil(maxPts * 1.15 / 10) * 10;
-    const yPts = (v) => padT + plotH - (v / ptsTop) * plotH;
-    // rank axis (right): 1 (top) .. field size (bottom)
-    const maxRank = hist.fieldSize;
-    const yRank = (r) => padT + ((r - 1) / (maxRank - 1)) * plotH;
+    // one metric, one axis
+    const series = hist.series.map(s => isRank ? s.ranks : s.points);
+    let yFn, ticks;
+    if (isRank) {
+      const maxRank = hist.fieldSize;
+      yFn = (r) => padT + ((r - 1) / (maxRank - 1)) * plotH;
+      ticks = [1, Math.round(maxRank / 4), Math.round(maxRank / 2),
+        Math.round(3 * maxRank / 4), maxRank].map(r => ({ v: r, label: "#" + r }));
+    } else {
+      const maxPts = Math.max(10, ...series.flat());
+      const top = Math.ceil(maxPts * 1.15 / 10) * 10;
+      yFn = (v) => padT + plotH - (v / top) * plotH;
+      const steps = 5;
+      ticks = Array.from({ length: steps + 1 },
+        (_, g) => ({ v: top / steps * g, label: String(Math.round(top / steps * g)) }));
+    }
 
     ctx.font = `${11 * dpr}px -apple-system, sans-serif`;
-    // gridlines + left labels (points)
-    const steps = 5;
-    for (let g = 0; g <= steps; g++) {
-      const v = (ptsTop / steps) * g, y = yPts(v);
+    for (const t of ticks) {
+      const y = yFn(t.v);
       ctx.strokeStyle = line; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
       ctx.fillStyle = muted; ctx.textAlign = "right";
-      ctx.fillText(String(Math.round(v)), padL - 8 * dpr, y + 4 * dpr);
-    }
-    // right labels (rank), pinned to the far right edge
-    ctx.textAlign = "right";
-    for (const r of [1, Math.round(maxRank / 4), Math.round(maxRank / 2), Math.round(3 * maxRank / 4), maxRank]) {
-      ctx.fillStyle = muted;
-      ctx.fillText("#" + r, W - 6 * dpr, yRank(r) + 4 * dpr);
+      ctx.fillText(t.label, padL - 8 * dpr, y + 4 * dpr);
     }
     // x labels (thinned)
     const every = Math.max(1, Math.ceil(n / 9));
@@ -371,29 +385,27 @@
       ctx.fillText(dt.toLocaleDateString([], { month: "short", day: "numeric" }), x(i), H - 8 * dpr);
     });
 
-    const drawLine = (vals, yFn, color, dashed, dy) => {
-      ctx.strokeStyle = color; ctx.lineWidth = (dashed ? 1.6 : 2.6) * dpr;
-      ctx.setLineDash(dashed ? [5 * dpr, 4 * dpr] : []);
-      ctx.beginPath();
-      vals.forEach((v, i) => { const X = x(i), Y = yFn(v) + dy; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
-      ctx.stroke(); ctx.setLineDash([]);
-      if (!dashed) {
-        ctx.fillStyle = color;
-        vals.forEach((v, i) => { ctx.beginPath(); ctx.arc(x(i), yFn(v) + dy, 3 * dpr, 0, 7); ctx.fill(); });
-      }
-    };
     // tiny per-person vertical offset so identical lines (shared picks) stay visible
     const off = (i) => (i - (hist.series.length - 1) / 2) * 2.4 * dpr;
-    hist.series.forEach((s, i) => drawLine(s.ranks, yRank, colors[i] + "99", true, off(i)));
-    hist.series.forEach((s, i) => drawLine(s.points, yPts, colors[i], false, off(i)));
-    // end-of-line point totals, nudged apart if overlapping
-    const ends = hist.series.map((s, i) => ({ y: yPts(s.points[n - 1]), v: s.points[n - 1], c: colors[i] }))
+    series.forEach((vals, i) => {
+      ctx.strokeStyle = colors[i]; ctx.lineWidth = 2.6 * dpr;
+      ctx.beginPath();
+      vals.forEach((v, k) => { const X = x(k), Y = yFn(v) + off(i); k ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+      ctx.stroke();
+      ctx.fillStyle = colors[i];
+      vals.forEach((v, k) => { ctx.beginPath(); ctx.arc(x(k), yFn(v) + off(i), 3 * dpr, 0, 7); ctx.fill(); });
+    });
+    // end-of-line value labels, nudged apart if overlapping
+    const ends = series.map((vals, i) => ({ y: yFn(vals[n - 1]), v: vals[n - 1], c: colors[i] }))
       .sort((a, b) => a.y - b.y);
     for (let i = 1; i < ends.length; i++) {
       if (ends[i].y - ends[i - 1].y < 14 * dpr) ends[i].y = ends[i - 1].y + 14 * dpr;
     }
     ctx.textAlign = "left"; ctx.font = `bold ${12 * dpr}px -apple-system, sans-serif`;
-    for (const e of ends) { ctx.fillStyle = e.c; ctx.fillText(String(e.v), x(n - 1) + 8 * dpr, e.y + 4 * dpr); }
+    for (const e of ends) {
+      ctx.fillStyle = e.c;
+      ctx.fillText(isRank ? "#" + e.v : String(e.v), x(n - 1) + 8 * dpr, e.y + 4 * dpr);
+    }
   }
 
   function renderHistogram() {
@@ -516,6 +528,8 @@
     runSim();
     $("#refreshBtn").addEventListener("click", () => doRefresh(false));
     $("#settingsBtn").addEventListener("click", openSettings);
+    $("#famModePoints").addEventListener("click", () => setFamMode("points"));
+    $("#famModeRank").addEventListener("click", () => setFamMode("rank"));
     $("#settingsSave").addEventListener("click", (e) => { e.preventDefault(); saveSettingsFromDlg(); });
     $("#settingsCancel").addEventListener("click", (e) => { e.preventDefault(); $("#settingsDlg").close(); });
     window.addEventListener("resize", () => { renderHistogram(); renderFamChart(); });

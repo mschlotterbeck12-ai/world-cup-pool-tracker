@@ -54,8 +54,14 @@
   </section>
 
   <section id="famChartSection">
-    <h2>Family race <span class="h2note">solid = points (left) · dashed = pool rank (right) · by gameday</span></h2>
-    <div id="famLegend" class="chartlegend"></div>
+    <h2>Family race <span class="h2note" id="famChartNote">points by gameday</span></h2>
+    <div class="chartbar">
+      <div class="seg">
+        <button id="famModePoints" class="active">Points</button>
+        <button id="famModeRank">Pool rank</button>
+      </div>
+      <div id="famLegend" class="chartlegend"></div>
+    </div>
     <canvas id="famChart"></canvas>
   </section>
 
