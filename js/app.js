@@ -98,6 +98,7 @@
     renderGroups(cur);
     renderSchedule(cur);
     renderFamChart();
+    renderGames();
     renderKeys();
     renderPath();
     $("#fetchedAt").textContent = "Data: " + new Date(snap.fetchedAt).toLocaleString();
@@ -388,6 +389,52 @@
       ? `<div class="keynote">💀 Already eliminated: ${dead.map(t => `${flag(t.team)} ${t.team}`).join(", ")} — that upside is gone.</div>`
       : "";
     $("#keysContent").innerHTML = summary + rows + deadNote;
+  }
+
+  // ---- "Games that matter most": upcoming fixtures ranked by swing to your odds ----
+  let gamesView = WC.MY_LABEL;
+
+  function renderGames() {
+    const sec = $("#gamesSection");
+    const fam = familyLabels();
+    if (fam.length < 2 || !simResult || !simResult.matchImpact) { sec.style.display = "none"; return; }
+    sec.style.display = "";
+    if (!fam.includes(gamesView)) gamesView = fam[0];
+    $("#gamesSeg").innerHTML = fam.map(l =>
+      `<button data-games="${l}" class="${l === gamesView ? "active" : ""}">${l}</button>`).join("");
+    $("#gamesSeg").querySelectorAll("button").forEach(b =>
+      b.addEventListener("click", () => { gamesView = b.dataset.games; renderGames(); }));
+
+    const byId = {};
+    for (const m of snap.matches) byId[m.id] = m;
+    const impact = (simResult.matchImpact[gamesView] || [])
+      .map(r => ({ ...r, m: byId[r.matchId] }))
+      .filter(r => r.m && !r.m.finished && !r.m.cancelled && r.ptsSwing > 0.05)
+      .sort((a, b) => b.ptsSwing - a.ptsSwing)
+      .slice(0, 6);
+
+    if (!impact.length) {
+      $("#gamesContent").innerHTML = `<p class="csmeta" style="padding:4px 2px">No upcoming fixtures move your odds much right now — check back as the schedule fills in.</p>`;
+      return;
+    }
+    $("#gamesContent").innerHTML = impact.map(r => {
+      const m = r.m;
+      const opp = m.homeName === r.team ? m.awayName : m.homeName;
+      const roundTag = m.group ? `Grp ${m.group}` : (WC.ROUND_LABEL[WC.ROUND_OF[m.round]] || m.round);
+      const oddsLine = Math.abs(r.t3Swing) >= 0.01
+        ? `<div class="godds">win → cash ${fmtPct(r.t3IfNot)} → <strong class="up">${fmtPct(r.t3IfWin)}</strong></div>`
+        : `<div class="godds dim">small effect on cash odds</div>`;
+      return `<div class="gamerow">
+        <div class="gleft">
+          <div class="gdate">${fmtTime(m.utc)} · ${roundTag}</div>
+          <div class="gteams"><span class="gmine">${flag(r.team)} ${r.team}</span> <span class="gvs">vs</span> ${flag(opp)} ${opp}</div>
+        </div>
+        <div class="gright">
+          <div class="gpts">+${r.ptsSwing.toFixed(1)}<span class="gptslbl">pts swing if they win</span></div>
+          ${oddsLine}
+        </div>
+      </div>`;
+    }).join("");
   }
 
   // ---- "Path to victory": gated until the bracket is set, then concrete scenarios ----

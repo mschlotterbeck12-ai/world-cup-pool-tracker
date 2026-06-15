@@ -44,6 +44,9 @@
       }
     };
 
+    // matchId -> winning team name (null = draw); recorded for every match played
+    const results = {};
+
     // --- group stage ---
     const standings = {}; // letter -> [teamName ordered]
     const thirds = [];    // {team, pts, gd, gf}
@@ -62,6 +65,7 @@
           [ga, gb] = simGoals(elo(m.homeName, opts), elo(m.awayName, opts));
         }
         addResult(m.homeName, m.awayName, ga, gb, true);
+        results[m.id] = ga > gb ? m.homeName : gb > ga ? m.awayName : null;
         const A = table[m.homeName], B = table[m.awayName];
         A.gf += ga; A.gd += ga - gb; B.gf += gb; B.gd += gb - ga;
         if (ga > gb) A.pts += 3; else if (gb > ga) B.pts += 3; else { A.pts++; B.pts++; }
@@ -122,6 +126,7 @@
       }
       addResult(a, b, ga, gb, false);
       winners[mid] = w; losers[mid] = w === a ? b : a;
+      results[mid] = w;
       return w;
     };
 
@@ -153,7 +158,7 @@
     const [ff1, ff2] = WC.KO_TEMPLATE[WC.FINAL_ID];
     const champ = playKO(WC.FINAL_ID, winners[ff1], winners[ff2], "FINAL");
     rec[champ].champion = true;
-    return rec;
+    return { rec, results };
   }
 
   function winProb(a, b, opts) {
@@ -281,6 +286,24 @@
     }
     const milestone = (r, tier) => tier >= 9 ? r.advanced : tier >= 5 ? !!r.reached.QF : !!r.reached.SF;
 
+    // "Games that matter": for family entries, track final points & top-3 conditional
+    // on each of their teams winning vs not winning each upcoming match.
+    const upcomingByTeam = {};
+    for (const m of snap.matches) {
+      if (m.finished || m.cancelled) continue;
+      for (const nm of [m.homeName, m.awayName]) (upcomingByTeam[nm] = upcomingByTeam[nm] || []).push(m.id);
+    }
+    const matchPairs = {}, matchAgg = {};   // label -> [{mid,team}], label -> {key -> counters}
+    for (const e of entrants) {
+      if (!keyLabels.includes(e.label)) continue;
+      const pairs = [];
+      for (const p of e.picks) for (const mid of (upcomingByTeam[p.name] || [])) pairs.push({ mid, team: p.name });
+      matchPairs[e.label] = pairs;
+      const agg = {};
+      for (const pr of pairs) agg[pr.mid + "|" + pr.team] = { wN: 0, wPts: 0, wT3: 0, eN: 0, ePts: 0, eT3: 0 };
+      matchAgg[e.label] = agg;
+    }
+
     const winningTotals = [];
     const cashTotals = [];   // 3rd-highest final total each sim (the cash line)
     const teamAgg = {};
@@ -292,7 +315,7 @@
     function chunk() {
       const end = Math.min(i + 200, N);
       for (; i < end; i++) {
-        const rec = simulateTournament(data, opts);
+        const { rec, results } = simulateTournament(data, opts);
         for (const name of TEAM_NAMES) {
           const r = rec[name], a = teamAgg[name];
           if (r.advanced) a.advance++;
@@ -319,12 +342,22 @@
           if (place === 1) entAgg[ei].wins++;
           if (place <= 3) entAgg[ei].top3++;
           entAgg[ei].sum += t;
-          const ka = keyAgg[entrants[ei].label];
+          const label = entrants[ei].label;
+          const ka = keyAgg[label];
           if (ka) {
             entrants[ei].picks.forEach((p, pk) => {
               if (milestone(rec[p.name], p.tier)) { ka[pk].cond++; if (place <= 3) ka[pk].condTop3++; }
               else if (place <= 3) ka[pk].noTop3++;
             });
+          }
+          const ma = matchAgg[label];
+          if (ma) {
+            const t3 = place <= 3 ? 1 : 0;
+            for (const pr of matchPairs[label]) {
+              const c = ma[pr.mid + "|" + pr.team];
+              if (results[pr.mid] === pr.team) { c.wN++; c.wPts += t; c.wT3 += t3; }
+              else { c.eN++; c.ePts += t; c.eT3 += t3; }
+            }
           }
         }
         winningTotals.push(sorted[sorted.length - 1]);
@@ -371,6 +404,20 @@
             return { team: p.name, tier: p.tier, pCond: a.cond / N, pTop3IfYes, pTop3IfNo, delta: pTop3IfYes - pTop3IfNo };
           }),
         ])),
+        matchImpact: Object.fromEntries(entrants.filter(e => matchAgg[e.label]).map(e => {
+          const agg = matchAgg[e.label];
+          const minN = Math.max(20, N * 0.01);   // both outcomes need enough samples
+          const rows = matchPairs[e.label].map(pr => {
+            const c = agg[pr.mid + "|" + pr.team];
+            const ok = c.wN >= minN && c.eN >= minN;
+            const t3IfWin = c.wN ? c.wT3 / c.wN : 0;
+            const t3IfNot = c.eN ? c.eT3 / c.eN : 0;
+            const ptsSwing = ok ? c.wPts / c.wN - c.ePts / c.eN : 0;
+            const t3Swing = ok ? t3IfWin - t3IfNot : 0;
+            return { matchId: pr.mid, team: pr.team, pWin: c.wN / (c.wN + c.eN || 1), ptsSwing, t3Swing, t3IfWin, t3IfNot };
+          });
+          return [e.label, rows];
+        })),
       });
     }
     chunk();
