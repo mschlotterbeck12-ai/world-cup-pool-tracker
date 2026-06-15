@@ -175,7 +175,7 @@
       return `<tr data-label="${r.label}" class="${r.label === view ? "viewing" : ""}">
         <td>${rank}</td><td><strong>${r.label}</strong>${r.label === view ? ' <span class="viewtag">viewing</span>' : ""}</td>
         <td class="lbpts">${r.entry.total}</td>
-        <td>${sim ? Math.round(sim.mean) : "–"}</td>
+        <td>${sim ? Math.round(sim.p50) : "–"}</td>
         <td>${sim ? fmtPct(sim.pWin) : "–"}</td>
         <td>${sim ? fmtPct(sim.pTop3) : "–"}</td>
         <td class="lbflags">${flags}</td>

@@ -180,7 +180,7 @@ WC.ROUND_LABEL = { R32: "Round of 32", R16: "Round of 16", QF: "Quarter-final", 
 
 // ---- Defaults for the simulation / pool field ----
 WC.DEFAULT_SETTINGS = {
-  nSims: 10000,
+  nSims: 5000,
   fieldSize: 20,          // total entries in the pool including mine (guess; edit in Settings)
   hostBoost: 50,          // Elo boost for USA / Mexico / Canada
   countLiveGoals: true,
