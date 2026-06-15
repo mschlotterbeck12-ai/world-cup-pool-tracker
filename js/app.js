@@ -99,6 +99,7 @@
     renderSchedule(cur);
     renderFamChart();
     renderKeys();
+    renderPath();
     $("#fetchedAt").textContent = "Data: " + new Date(snap.fetchedAt).toLocaleString();
   }
 
@@ -387,6 +388,114 @@
       ? `<div class="keynote">💀 Already eliminated: ${dead.map(t => `${flag(t.team)} ${t.team}`).join(", ")} — that upside is gone.</div>`
       : "";
     $("#keysContent").innerHTML = summary + rows + deadNote;
+  }
+
+  // ---- "Path to victory": gated until the bracket is set, then concrete scenarios ----
+  let pathView = WC.MY_LABEL;
+  const KO_ORDER = ["R32", "R16", "QF", "SF", "FINAL"];
+  const KO_LABEL = { R32: "Round of 32", R16: "Round of 16", QF: "quarter-finals", SF: "semi-finals", FINAL: "the final" };
+
+  function groupStageDone() {
+    const g = snap.matches.filter(m => m.group);
+    return g.length > 0 && g.every(m => m.finished);
+  }
+
+  function renderPath() {
+    const sec = $("#pathSection");
+    const fam = familyLabels();
+    if (fam.length < 2) { sec.style.display = "none"; return; }
+    sec.style.display = "";
+    if (!fam.includes(pathView)) pathView = fam[0];
+    $("#pathSeg").innerHTML = fam.map(l =>
+      `<button data-path="${l}" class="${l === pathView ? "active" : ""}">${l}</button>`).join("");
+    $("#pathSeg").querySelectorAll("button").forEach(b =>
+      b.addEventListener("click", () => { pathView = b.dataset.path; renderPath(); }));
+
+    // Locked until every group match is played (all knockout spots secured)
+    if (!groupStageDone() || !simResult) {
+      const left = snap.matches.filter(m => m.group && !m.finished).length;
+      $("#pathContent").innerHTML = `<div class="comingsoon">
+        <div class="cslock">🔒</div>
+        <div class="cstitle">Coming soon</div>
+        <p>Your path to the win unlocks once <strong>all knockout spots are locked in</strong> — i.e. the group stage is complete and the Round of 32 is set.</p>
+        <p class="csmeta">${left > 0 ? `${left} group ${left === 1 ? "match" : "matches"} still to play.` : "Finalizing the bracket…"} Then this fills in with exactly what your teams need to do, and updates as teams get knocked out.</p>
+      </div>`;
+      return;
+    }
+
+    const entries = scoredEntries();
+    const rows = entries.slice().sort((a, b) => b.entry.total - a.entry.total);
+    const ranks = [];
+    rows.forEach((r, i) => { ranks[i] = i > 0 && r.entry.total === rows[i - 1].entry.total ? ranks[i - 1] : i + 1; });
+    const myIdx = rows.findIndex(r => r.label === pathView);
+    const me = rows[myIdx];
+    const myRank = ranks[myIdx];
+    const ent = simEntrant(pathView);
+    const cash = Math.round(simResult.cashMedian);
+    const winScore = Math.round(simResult.winningMedian);
+    const toPassCash = Math.max(0, myRank - 3);
+    const toPassWin = Math.max(0, myRank - 1);
+
+    const verdict = ent.pTop3 >= 0.5 ? "You're in a commanding spot."
+      : ent.pTop3 >= 0.15 ? "You're live for the cash."
+      : ent.pTop3 >= 0.03 ? "It's a long shot, but the path exists." : "You need chaos to break your way.";
+
+    const summary = `<div class="pathhead">
+      <div class="pathverdict">${verdict}</div>
+      <div class="keysummary">
+        <span class="chip">#${myRank} now · ${me.entry.total} pts</span>
+        <span class="chip">projected ${Math.round(ent.p50)}</span>
+        <span class="chip">win ${fmtPct(ent.pWin)}</span>
+        <span class="chip">top 3 ${fmtPct(ent.pTop3)}</span>
+      </div>
+      <div class="pathtargets">
+        <div class="ptcard"><div class="ptbig">${cash}</div><div class="ptlbl">typical cash line (3rd)</div>
+          <div class="ptsub">${me.entry.total >= cash ? "you're already above it" : `~${cash - me.entry.total} pts above your current total`}</div></div>
+        <div class="ptcard"><div class="ptbig">${winScore}</div><div class="ptlbl">typical winning score</div>
+          <div class="ptsub">${me.entry.total >= winScore ? "you're already above it" : `~${winScore - me.entry.total} pts above your current total`}</div></div>
+        <div class="ptcard"><div class="ptbig">${toPassCash}</div><div class="ptlbl">entries to pass for top 3</div>
+          <div class="ptsub">${toPassWin} to pass for 1st</div></div>
+      </div>
+    </div>`;
+
+    // Per surviving team: the next knockout milestone it can still reach + ceiling
+    const alive = me.entry.teams.filter(t => !t.eliminated);
+    const deepest = (t) => { let d = -1; KO_ORDER.forEach((k, i) => { if (t.reached[k]) d = i; }); return d; };
+    const reachPts = { R16: settings.scoring.reachR16, QF: settings.scoring.reachQF, SF: settings.scoring.reachSF, FINAL: settings.scoring.reachFinal };
+    const scen = alive.map(t => {
+      const sim = simResult.teams[t.team] || {};
+      const d = Math.max(0, deepest(t));  // groups done ⇒ survivors are at least in the R32
+      const nextKey = KO_ORDER[d + 1];   // undefined if already in final
+      const nextP = nextKey ? sim[nextKey === "R32" ? "R16" : nextKey] : null;
+      const champP = sim.champion || 0;
+      const mult = t.multiplier;
+      const nextPts = nextKey && reachPts[nextKey] ? reachPts[nextKey] * mult : 0;
+      return { t, sim, nextKey, nextP, champP, nextPts, score: (nextP || 0) * nextPts + champP * 20 * mult };
+    }).sort((a, b) => b.score - a.score);
+
+    const scenRows = scen.map(s => {
+      const t = s.t;
+      const cur = KO_ORDER[deepest(t)] || "group";
+      const curLabel = cur === "FINAL" ? "in the final" : cur === "group" ? "into the knockouts" : `in the ${KO_LABEL[cur]}`;
+      const need = s.nextKey
+        ? `needs to reach <strong>${KO_LABEL[s.nextKey]}</strong> — ${fmtPct(s.nextP)} likely <span class="keymeta">(+${s.nextPts} pts${t.multiplier > 1 ? ", 2×" : ""})</span>`
+        : `is in the final — win it for the title <span class="keymeta">(${fmtPct(s.champP)} champion)</span>`;
+      const ceiling = s.champP > 0.005 ? ` · 🏆 ${fmtPct(s.champP)}` : "";
+      return `<div class="keyrow">
+        <span class="flag">${flag(t.team)}</span>
+        <div class="keybody">
+          <strong>${t.team}</strong> <span class="meta">Tier ${t.tier}${t.multiplier > 1 ? ' · <em class="dbl">2×</em>' : ""} · ${curLabel}</span>
+          <div class="keytext">${need}${ceiling}</div>
+        </div>
+      </div>`;
+    }).join("");
+
+    const dead = me.entry.teams.filter(t => t.eliminated);
+    const deadNote = dead.length
+      ? `<div class="keynote">💀 Out: ${dead.map(t => `${flag(t.team)} ${t.team}`).join(", ")} — those points are locked.</div>`
+      : "";
+    $("#pathContent").innerHTML = summary +
+      `<h3 class="lbsub">What your live teams need to do</h3>` + (scenRows || "<p class='csmeta'>All your teams are eliminated.</p>") + deadNote;
   }
 
   let famMode = "points";   // "points" | "rank"

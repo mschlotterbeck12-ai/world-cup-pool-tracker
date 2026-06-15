@@ -282,6 +282,7 @@
     const milestone = (r, tier) => tier >= 9 ? r.advanced : tier >= 5 ? !!r.reached.QF : !!r.reached.SF;
 
     const winningTotals = [];
+    const cashTotals = [];   // 3rd-highest final total each sim (the cash line)
     const teamAgg = {};
     for (const name of TEAM_NAMES) {
       teamAgg[name] = { advance: 0, winGroup: 0, R16: 0, QF: 0, SF: 0, FINAL: 0, champion: 0, ptsSum: 0 };
@@ -327,6 +328,7 @@
           }
         }
         winningTotals.push(sorted[sorted.length - 1]);
+        cashTotals.push(sorted[Math.max(0, sorted.length - 3)]);
       }
       if (onProgress) onProgress(i / N);
       if (i < N) setTimeout(chunk, 0);
@@ -335,6 +337,7 @@
 
     function finish() {
       winningTotals.sort((a, b) => a - b);
+      cashTotals.sort((a, b) => a - b);
       const q = (arr, p) => arr[Math.min(arr.length - 1, Math.floor(p * arr.length))];
       const teams = {};
       for (const [name, a] of Object.entries(teamAgg)) {
@@ -357,6 +360,7 @@
           };
         }),
         winningMedian: q(winningTotals, 0.50),
+        cashMedian: q(cashTotals, 0.50),
         teams,
         keys: Object.fromEntries(entrants.filter(e => keyAgg[e.label]).map(e => [
           e.label,
