@@ -90,7 +90,6 @@
     view = cur.label;
     const possessive = `${cur.label}'s`;
     $("#teamsTitle").textContent = `${possessive} teams`;
-    $("#histoWho").textContent = cur.label;
     $("#ptsLabel").textContent = `${possessive} points`;
     renderHeader(cur);
     renderLive(cur);
@@ -198,7 +197,6 @@
       tr.addEventListener("click", () => {
         view = tr.dataset.label;
         render();
-        renderHistogram();
       });
     });
   }
@@ -485,45 +483,6 @@
     }
   }
 
-  function renderHistogram() {
-    const ent = simEntrant(view);
-    if (!ent) return;
-    const cv = $("#histo"), ctx = cv.getContext("2d");
-    const W = cv.width = cv.clientWidth * devicePixelRatio;
-    const H = cv.height = 220 * devicePixelRatio;
-    ctx.clearRect(0, 0, W, H);
-    const totals = ent.totals;
-    const min = totals[0], max = totals[totals.length - 1];
-    const nb = 40, bins = new Array(nb).fill(0);
-    for (const t of totals) bins[Math.min(nb - 1, Math.floor((t - min) / (max - min + 1e-9) * nb))]++;
-    const bmax = Math.max(...bins);
-    const css = getComputedStyle(document.documentElement);
-    ctx.fillStyle = css.getPropertyValue("--accent").trim() || "#4ade80";
-    const bw = W / nb;
-    bins.forEach((b, i) => {
-      const h = (b / bmax) * (H - 40 * devicePixelRatio);
-      ctx.globalAlpha = 0.85;
-      ctx.fillRect(i * bw + 1, H - h - 20 * devicePixelRatio, bw - 2, h);
-    });
-    ctx.globalAlpha = 1;
-    // markers: median (mine) and median winning score
-    const mark = (val, color, label, yOff) => {
-      const x = ((val - min) / (max - min + 1e-9)) * W;
-      ctx.strokeStyle = color; ctx.lineWidth = 2 * devicePixelRatio;
-      ctx.setLineDash([6, 4]); ctx.beginPath();
-      ctx.moveTo(x, 0); ctx.lineTo(x, H - 20 * devicePixelRatio); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle = color; ctx.font = `${12 * devicePixelRatio}px -apple-system, sans-serif`;
-      ctx.textAlign = x > W * 0.8 ? "right" : "left";
-      ctx.fillText(label, x + (x > W * 0.8 ? -6 : 6) * devicePixelRatio, (14 + yOff) * devicePixelRatio);
-    };
-    mark(ent.p50, css.getPropertyValue("--ink").trim() || "#fff", `${view}'s median ${Math.round(ent.p50)}`, 0);
-    mark(simResult.winningMedian, "#fbbf24", `typical winning score ${Math.round(simResult.winningMedian)}`, 16);
-    // x axis labels
-    ctx.fillStyle = css.getPropertyValue("--muted").trim() || "#888";
-    ctx.textAlign = "left"; ctx.fillText(String(Math.round(min)), 4, H - 5);
-    ctx.textAlign = "right"; ctx.fillText(String(Math.round(max)), W - 4, H - 5);
-  }
-
   // ---------- simulation ----------
   function runSim() {
     const { errors } = parseRivals(settings.rivalsText);
@@ -535,7 +494,6 @@
         simResult = res;
         $("#simStatus").textContent = "";
         render();
-        renderHistogram();
       });
   }
 
@@ -610,7 +568,7 @@
     $("#famModeRank").addEventListener("click", () => setFamMode("rank"));
     $("#settingsSave").addEventListener("click", (e) => { e.preventDefault(); saveSettingsFromDlg(); });
     $("#settingsCancel").addEventListener("click", (e) => { e.preventDefault(); $("#settingsDlg").close(); });
-    window.addEventListener("resize", () => { renderHistogram(); renderFamChart(); });
+    window.addEventListener("resize", () => { renderFamChart(); });
     doRefresh(true);          // try to get fresher data than the baked snapshot
     setTimeout(autoRefreshLoop, 60e3);
   });
