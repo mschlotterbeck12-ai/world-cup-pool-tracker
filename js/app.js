@@ -163,7 +163,7 @@
     rows.forEach((r, i) => {
       ranks[i] = i > 0 && r.entry.total === rows[i - 1].entry.total ? ranks[i - 1] : i + 1;
     });
-    const myRank = ranks[rows.findIndex(r => r.label === WC.MY_LABEL)];
+    const myRank = ranks[rows.findIndex(r => r.label === view)];
     $("#myRank").textContent = `#${myRank}`;
     $("#myRankOf").textContent = `of ${rows.length} entries`;
     const rowHtml = (r, rank) => {
@@ -203,15 +203,30 @@
     });
   }
 
+  // How many pool entries picked each country (memoized per data load).
+  let ownershipCache = null;
+  function ownership() {
+    if (ownershipCache) return ownershipCache;
+    const counts = {};
+    const all = baseEntries();
+    for (const e of all) for (const p of e.picks) counts[p.name] = (counts[p.name] || 0) + 1;
+    ownershipCache = { counts, total: all.length };
+    return ownershipCache;
+  }
+
   function renderPicks(entry) {
     const grid = $("#picksGrid");
+    const own = ownership();
     grid.innerHTML = entry.teams.map(t => {
       const sim = simResult ? simResult.teams[t.team] : null;
       const dbl = WC.DOUBLE_TIERS.has(t.tier);
       const goalsPts = (t.goals + t.liveGoals) * settings.scoring.goal;
+      const owned = own.counts[t.team] || 0;
+      const ownPct = Math.round((owned / own.total) * 100);
       const chips = [
         `⚽ ${t.goals + t.liveGoals} goal${t.goals + t.liveGoals === 1 ? "" : "s"} (${goalsPts * t.multiplier})`,
         `${t.wins}W ${t.draws}D ${t.losses}L (${t.groupResultPts * t.multiplier})`,
+        `👥 ${owned}/${own.total} picked (${ownPct}%)`,
       ];
       if (t.finishBonus) chips.push(`Group bonus (${t.finishBonus * t.multiplier})`);
       if (t.finishPending) chips.push(`3rd — best-3rd TBD`);
@@ -571,6 +586,7 @@
       settings.scoring = { ...WC.DEFAULT_SCORING, ...scoring };
       settings.rivalsText = $("#setRivals").value;
       saveSettings();
+      ownershipCache = null;   // rivals may have changed
       $("#settingsDlg").close();
       render();
       runSim();
